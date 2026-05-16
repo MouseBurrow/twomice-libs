@@ -12,6 +12,21 @@ pub trait DbErrorTrait: Sized {
     fn is_unexpected(&self) -> bool;
 }
 
+pub fn map_sqlx_error<E: DbErrorTrait>(err: sqlx::Error) -> E {
+    if let sqlx::Error::Database(db_err) = &err {
+        if let Some(code) = db_err.code() {
+            let mapped = E::from_code(&code);
+            if E::is_unexpected(&mapped) {
+                log::error!("UNEXPECTED SQLx ERROR (code {code}): {err:?}");
+            } else {
+                return mapped;
+            }
+        }
+    }
+    log::error!("UNEXPECTED SQLx ERROR: {err:?}");
+    E::unexpected(err)
+}
+
 #[macro_export]
 macro_rules! define_errors {
     (
