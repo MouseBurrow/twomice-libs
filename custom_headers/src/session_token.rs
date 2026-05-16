@@ -1,37 +1,35 @@
-use actix_web::cookie::{time, Cookie, SameSite};
-use actix_web::dev::Payload;
-use actix_web::{FromRequest, HttpRequest};
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+use axum::http::StatusCode;
 use sqlx::postgres::{PgArgumentBuffer, PgTypeInfo};
 use sqlx::{Encode, Postgres, Type};
-use std::future::{ready, Ready};
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionToken(pub String);
 
-impl FromRequest for SessionToken {
-    type Error = actix_web::Error;
-    type Future = Ready<Result<Self, actix_web::Error>>;
+#[axum::async_trait]
+impl<S: Send + Sync> FromRequestParts<S> for SessionToken {
+    type Rejection = (StatusCode, String);
 
-    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let header = match req.headers().get("X-Session-Token") {
-            Some(v) => v,
-            None => {
-                return ready(Err(actix_web::error::ErrorBadRequest(
-                    "missing X-Session-Token",
-                )));
-            }
-        };
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let header = parts
+            .headers
+            .get("X-Session-Token")
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing X-Session-Token".into()))?;
 
-        let token = match header.to_str() {
-            Ok(s) => s.to_string(),
-            Err(_) => {
-                return ready(Err(actix_web::error::ErrorBadRequest(
-                    "invalid X-Session-Token",
-                )));
-            }
-        };
+        let token = header
+            .to_str()
+            .map_err(|_| (StatusCode::BAD_REQUEST, "invalid X-Session-Token".into()))?
+            .to_string();
 
-        ready(Ok(SessionToken(token)))
+        Ok(SessionToken(token))
+    }
+}
+
+impl fmt::Display for SessionToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -57,13 +55,25 @@ impl<'q> Encode<'q, Postgres> for SessionToken {
 }
 
 impl SessionToken {
-    pub fn create_cookie<'a>(secure: bool, token: String) -> Cookie<'a> {
-        Cookie::build("session_token", token)
-            .http_only(true)
-            .secure(secure)
-            .same_site(SameSite::Lax)
-            .path("/")
-            .max_age(time::Duration::days(30))
-            .finish()
+    pub fn cookie_value(secure: bool, token: String) -> String {
+        let mut header = format!(
+            "session_token={}; HttpOnly; Path=/; Max-Age={}",
+            token,
+            30 * 24 * 3600
+        );
+        if secure {
+            header.push_str("; Secure");
+        }
+        header.push_str("; SameSite=Lax");
+        header
+    }
+
+    pub fn clear_cookie_value(secure: bool) -> String {
+        let mut header = "session_token=; HttpOnly; Path=/; Max-Age=0".to_string();
+        if secure {
+            header.push_str("; Secure");
+        }
+        header.push_str("; SameSite=Lax");
+        header
     }
 }

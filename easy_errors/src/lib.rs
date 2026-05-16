@@ -1,4 +1,5 @@
-pub use actix_web;
+pub use axum;
+pub use http;
 pub use log;
 pub use serde_json;
 pub use sqlx;
@@ -64,12 +65,12 @@ macro_rules! define_errors {
         }
 
         impl $name {
-            pub fn http_status(&self) -> $crate::actix_web::http::StatusCode {
+            pub fn http_status(&self) -> $crate::http::StatusCode {
                 match self {
                     $(
-                        Self::$variant => $crate::actix_web::http::StatusCode::$status,
+                        Self::$variant => $crate::http::StatusCode::$status,
                     )*
-                    Self::Unexpected(_) => $crate::actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    Self::Unexpected(_) => $crate::http::StatusCode::INTERNAL_SERVER_ERROR,
                 }
             }
 
@@ -83,22 +84,20 @@ macro_rules! define_errors {
             }
         }
 
-        impl $crate::actix_web::ResponseError for $name {
-            fn status_code(&self) -> $crate::actix_web::http::StatusCode {
-                self.http_status()
-            }
+        impl $crate::axum::response::IntoResponse for $name {
+            fn into_response(self) -> $crate::axum::response::Response {
+                use $crate::axum::response::IntoResponse as _;
 
-            fn error_response(&self) -> $crate::actix_web::HttpResponse {
-                if <_ as easy_errors::DbErrorTrait>::is_unexpected(self) {
-                    return $crate::actix_web::HttpResponse::InternalServerError().finish();
+                if <_ as easy_errors::DbErrorTrait>::is_unexpected(&self) {
+                    return $crate::http::StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
 
-                $crate::actix_web::HttpResponse::build(self.http_status()).json(
-                    $crate::serde_json::json!({
-                        "error": self.code(),
-                        "message": self.to_string()
-                    })
-                )
+                let body = $crate::serde_json::json!({
+                    "error": self.code(),
+                    "message": self.to_string()
+                });
+
+                (self.http_status(), $crate::axum::Json(body)).into_response()
             }
         }
     };

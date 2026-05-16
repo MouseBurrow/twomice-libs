@@ -1,38 +1,31 @@
-use actix_web::dev::Payload;
-use actix_web::{FromRequest, HttpRequest};
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+use axum::http::StatusCode;
 use sqlx::postgres::{PgArgumentBuffer, PgTypeInfo};
 use sqlx::{Encode, Postgres, Type};
-use std::future::{ready, Ready};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserId(pub Uuid);
 
-impl FromRequest for UserId {
-    type Error = actix_web::Error;
-    type Future = Ready<Result<Self, actix_web::Error>>;
+#[axum::async_trait]
+impl<S: Send + Sync> FromRequestParts<S> for UserId {
+    type Rejection = (StatusCode, String);
 
-    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
-        let header = match req.headers().get("X-User-Id") {
-            Some(v) => v,
-            None => {
-                return ready(Err(actix_web::error::ErrorUnauthorized(
-                    "missing X-User-Id",
-                )));
-            }
-        };
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let header = parts
+            .headers
+            .get("X-User-Id")
+            .ok_or_else(|| (StatusCode::UNAUTHORIZED, "missing X-User-Id".into()))?;
 
-        let s = match header.to_str() {
-            Ok(s) => s,
-            Err(_) => return ready(Err(actix_web::error::ErrorBadRequest("invalid X-User-Id"))),
-        };
+        let s = header
+            .to_str()
+            .map_err(|_| (StatusCode::BAD_REQUEST, "invalid X-User-Id".into()))?;
 
-        let uuid = match Uuid::parse_str(s) {
-            Ok(u) => u,
-            Err(_) => return ready(Err(actix_web::error::ErrorBadRequest("invalid X-User-Id"))),
-        };
+        let uuid = Uuid::parse_str(s)
+            .map_err(|_| (StatusCode::BAD_REQUEST, "invalid X-User-Id".into()))?;
 
-        ready(Ok(UserId(uuid)))
+        Ok(UserId(uuid))
     }
 }
 
