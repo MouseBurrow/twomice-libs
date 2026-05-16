@@ -77,3 +77,40 @@ impl SessionToken {
         header
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cookie_value_includes_token() {
+        let val = SessionToken::cookie_value(false, "mytoken".into());
+        assert!(val.contains("session_token=mytoken"));
+    }
+
+    #[test]
+    fn cookie_value_has_flags() {
+        let val = SessionToken::cookie_value(false, "t".into());
+        assert!(val.contains("HttpOnly"));
+        assert!(val.contains("Path=/"));
+        assert!(val.contains("Max-Age="));
+    }
+
+    #[test]
+    fn cookie_value_secure_when_enabled() {
+        assert!(SessionToken::cookie_value(true, "t".into()).contains("Secure"));
+        assert!(!SessionToken::cookie_value(false, "t".into()).contains("Secure"));
+    }
+
+    #[test]
+    fn clear_cookie_value_is_zero_max_age() {
+        let val = SessionToken::clear_cookie_value(false);
+        assert!(val.contains("Max-Age=0"));
+    }
+
+    #[test]
+    fn clear_cookie_value_secure() {
+        assert!(SessionToken::clear_cookie_value(true).contains("Secure"));
+        assert!(!SessionToken::clear_cookie_value(false).contains("Secure"));
+    }
+}

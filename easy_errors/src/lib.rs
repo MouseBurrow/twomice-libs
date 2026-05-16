@@ -103,7 +103,7 @@ macro_rules! define_errors {
             fn into_response(self) -> $crate::axum::response::Response {
                 use $crate::axum::response::IntoResponse as _;
 
-                if <_ as easy_errors::DbErrorTrait>::is_unexpected(&self) {
+                if <_ as $crate::DbErrorTrait>::is_unexpected(&self) {
                     return $crate::http::StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
 
@@ -116,4 +116,59 @@ macro_rules! define_errors {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use http::StatusCode;
+
+    define_errors!( TestError {
+        NotFound => { code: "P0000", status: NOT_FOUND, message: "Not found" },
+        Conflict => { code: "23505", status: CONFLICT, message: "Already exists" },
+    });
+
+    #[test]
+    fn error_display_message() {
+        assert_eq!(TestError::NotFound.to_string(), "Not found");
+        assert_eq!(TestError::Conflict.to_string(), "Already exists");
+        assert_eq!(
+            TestError::Unexpected("x".into()).to_string(),
+            "Internal server error"
+        );
+    }
+
+    #[test]
+    fn error_http_status() {
+        assert_eq!(TestError::NotFound.http_status(), StatusCode::NOT_FOUND);
+        assert_eq!(TestError::Conflict.http_status(), StatusCode::CONFLICT);
+        assert_eq!(
+            TestError::Unexpected("x".into()).http_status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn from_code_maps_known_codes() {
+        assert_eq!(TestError::from_code("P0000"), TestError::NotFound);
+        assert_eq!(TestError::from_code("23505"), TestError::Conflict);
+    }
+
+    #[test]
+    fn from_code_returns_unexpected_for_unknown() {
+        let err = TestError::from_code("99999");
+        assert!(err.is_unexpected());
+    }
+
+    #[test]
+    fn is_unexpected_distinguishes() {
+        assert!(!TestError::NotFound.is_unexpected());
+        assert!(TestError::Unexpected("db crash".into()).is_unexpected());
+    }
+
+    #[test]
+    fn http_status_on_unexpected_is_500() {
+        let err = TestError::Unexpected("oops".into());
+        assert_eq!(err.http_status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
 }
