@@ -101,8 +101,6 @@ macro_rules! define_errors {
 
         impl $crate::axum::response::IntoResponse for $name {
             fn into_response(self) -> $crate::axum::response::Response {
-                use $crate::axum::response::IntoResponse as _;
-
                 if <_ as $crate::DbErrorTrait>::is_unexpected(&self) {
                     return $crate::http::StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
