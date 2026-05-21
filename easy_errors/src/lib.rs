@@ -124,9 +124,7 @@ pub fn json_empty() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({}))
 }
 
-pub async fn insert_retry_on_duplicate<E: DbErrorTrait, F, Fut>(
-    mut attempt: F,
-) -> Result<(), E>
+pub async fn insert_retry_on_duplicate<E: DbErrorTrait, F, Fut>(mut attempt: F) -> Result<(), E>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = Result<(), sqlx::Error>>,
@@ -134,9 +132,7 @@ where
     loop {
         match attempt().await {
             Ok(()) => return Ok(()),
-            Err(sqlx::Error::Database(db_err))
-                if db_err.code().as_deref() == Some("23505") =>
-            {
+            Err(sqlx::Error::Database(db_err)) if db_err.code().as_deref() == Some("23505") => {
                 continue;
             }
             Err(e) => return Err(map_sqlx_error(e)),

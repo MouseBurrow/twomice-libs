@@ -1,7 +1,7 @@
-use axum::Router;
 use crate::app_data::AppData;
 use crate::config::Config;
 use crate::logger;
+use axum::Router;
 
 pub async fn serve(service: &str, router: Router<AppData>) -> anyhow::Result<()> {
     logger::init();
