@@ -76,6 +76,32 @@ impl SessionToken {
         header.push_str("; SameSite=Lax");
         header
     }
+
+    pub fn set_cookie_response<T: serde::Serialize>(
+        cookie_value: String,
+        body: T,
+    ) -> (axum::http::HeaderMap, axum::Json<T>) {
+        use axum::http::header::{HeaderMap, HeaderValue, SET_COOKIE};
+        let mut headers = HeaderMap::new();
+        headers.insert(SET_COOKIE, HeaderValue::from_str(&cookie_value).unwrap());
+        (headers, axum::Json(body))
+    }
+}
+
+pub fn parse_session_token(cookie_header: &http::HeaderValue) -> Option<String> {
+    let cookie_str = cookie_header.to_str().ok()?;
+    for pair in cookie_str.split("; ") {
+        if let Some(value) = pair.strip_prefix("session_token=") {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+pub fn extract_session_token_from_headers(headers: &http::HeaderMap) -> Option<String> {
+    headers
+        .get(http::header::COOKIE)
+        .and_then(parse_session_token)
 }
 
 #[cfg(test)]
@@ -112,5 +138,42 @@ mod tests {
     fn clear_cookie_value_secure() {
         assert!(SessionToken::clear_cookie_value(true).contains("Secure"));
         assert!(!SessionToken::clear_cookie_value(false).contains("Secure"));
+    }
+
+    #[test]
+    fn parse_session_token_found() {
+        let val = http::HeaderValue::from_static("session_token=abc123; Other=val");
+        assert_eq!(parse_session_token(&val), Some("abc123".into()));
+    }
+
+    #[test]
+    fn parse_session_token_not_found() {
+        let val = http::HeaderValue::from_static("other=value");
+        assert_eq!(parse_session_token(&val), None);
+    }
+
+    #[test]
+    fn parse_session_token_empty_cookie() {
+        let val = http::HeaderValue::from_static("");
+        assert_eq!(parse_session_token(&val), None);
+    }
+
+    #[test]
+    fn extract_session_token_from_headers_with_cookie() {
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            http::header::COOKIE,
+            http::HeaderValue::from_static("session_token=xyz789"),
+        );
+        assert_eq!(
+            extract_session_token_from_headers(&headers),
+            Some("xyz789".into())
+        );
+    }
+
+    #[test]
+    fn extract_session_token_from_headers_missing() {
+        let headers = http::HeaderMap::new();
+        assert_eq!(extract_session_token_from_headers(&headers), None);
     }
 }
