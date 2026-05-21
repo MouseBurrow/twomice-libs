@@ -8,6 +8,6 @@ axum = "0.7"
 http = "1"
 log = "0.4.29"
 serde_json = "1"
-sqlx = { version = "0.9.0-alpha.1", features = ["runtime-tokio"] }
+sqlx = { version = "0.9.0-alpha.1", features = ["runtime-tokio"], default-features = false }
 strum = { version = "0.27.2", features = ["derive"] }
 strum_macros = "0.27.2"
