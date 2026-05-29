@@ -3,10 +3,9 @@ use axum::http::request::Parts;
 use axum::http::StatusCode;
 use sqlx::postgres::{PgArgumentBuffer, PgTypeInfo};
 use sqlx::{Encode, Postgres, Type};
-use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UserId(pub Uuid);
+pub struct UserId(pub i64);
 
 #[axum::async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for UserId {
@@ -22,14 +21,15 @@ impl<S: Send + Sync> FromRequestParts<S> for UserId {
             .to_str()
             .map_err(|_| (StatusCode::BAD_REQUEST, "invalid X-User-Id".into()))?;
 
-        let uuid = Uuid::parse_str(s)
+        let id: i64 = s
+            .parse()
             .map_err(|_| (StatusCode::BAD_REQUEST, "invalid X-User-Id".into()))?;
 
-        Ok(UserId(uuid))
+        Ok(UserId(id))
     }
 }
 
-impl From<UserId> for Uuid {
+impl From<UserId> for i64 {
     fn from(value: UserId) -> Self {
         value.0
     }
@@ -37,7 +37,7 @@ impl From<UserId> for Uuid {
 
 impl Type<Postgres> for UserId {
     fn type_info() -> PgTypeInfo {
-        <Uuid as Type<Postgres>>::type_info()
+        <i64 as Type<Postgres>>::type_info()
     }
 }
 
